@@ -3,6 +3,7 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 const dns = require('dns');
+const axios = require('axios');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -10,6 +11,14 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 app.get('/', (req, res) => {
     res.send('Rakesh Daniel Portfolio Bot is Alive and Running! ');
 });
+// Render  Self-Ping 
+
+setInterval(() => {
+   
+    axios.get('https://rakeshakmbot.onrender.com') 
+        .then(() => console.log('Self-Ping Success: Keeping the bot awake! ⚡'))
+        .catch((err) => console.error('Self-Ping Error:', err.message));
+}, 10 * 60 * 1000); // ஒவ்வொரு 10 நிமிடத்திற்கும் (10 minutes) பிங் செய்யும்
 
 // யூஸர் செஷன் மேனேஜ்மென்ட்
 const userSessions = {};
