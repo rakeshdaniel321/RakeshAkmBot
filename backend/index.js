@@ -5,7 +5,7 @@ require('dotenv').config();
 const dns = require('dns');
 const axios = require('axios');
 
-
+// Render-ல் ஏற்படும் சில DNS பிரச்சனைகளைத் தவிர்க்க கூகுள் DNS செட் செய்யப்படுகிறது
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const app = express();
@@ -15,16 +15,17 @@ app.get('/', (req, res) => {
     res.send('Rakesh Daniel Portfolio Bot is Alive and Running! 🚀');
 });
 
+// Render Self-Ping லாஜிக் (சர்வர் தூங்காமல் (Sleep) இருக்க)
 setInterval(() => {
     axios.get('https://rakeshakmbot.onrender.com') 
         .then(() => console.log('Self-Ping Success: Keeping the bot awake! ⚡'))
         .catch((err) => console.error('Self-Ping Error:', err.message));
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000); // ஒவ்வொரு 10 நிமிடத்திற்கும் பிங் செய்யும்
 
-
+// யூஸர் செஷன் மேனேஜ்மென்ட்
 const userSessions = {};
 
-
+// 3 மொழிகளுக்கான மெசேஜ் டெம்ப்ளேட்ஸ் (Localization)
 const textTemplates = {
     EN: {
         welcome: "Hello! Welcome to Rakesh Daniel's Assistant Bot. 🧑‍💻\n\nWhat is your name?",
@@ -67,7 +68,7 @@ const textTemplates = {
     }
 };
 
-
+// FLAMES கணக்கீடு லாஜிக்
 function calculateFlames(name1, name2) {
     let n1 = name1.toLowerCase().replace(/\s+/g, '').split('');
     let n2 = name2.toLowerCase().replace(/\s+/g, '').split('');
@@ -99,16 +100,19 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-
+// ஜிமெயில் அனுப்பும் ஃபங்ஷன் (கூகுள் டெவலப்பர் ஆப்டிமைஸ்டு + டைம்-அவுட் பாதுகாப்பு வடிவம்)
 async function sendEmailData(userData) {
-   
+    // Render எக்ஸ்போர்ட்ல இருக்கற பாஸ்வேர்ட் ஸ்பேஸ்களை ஆட்டோமேட்டிக்கா நீக்குகிறது
     const cleanPassword = process.env.EMAIL_PASSWORD ? process.env.EMAIL_PASSWORD.replace(/\s+/g, '') : '';
 
     const transporter = nodemailer.createTransport({
         service: "gmail",
+        connectionTimeout: 10000, // 10 வினாடிகளுக்கு மேல் கூகுள் ரெஸ்பான்ஸ் தராவிட்டால் கனெக்ஷனை கட் செய்துவிடும்
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
         auth: {
-            user: process.env.MY_EMAIL, 
-            pass: cleanPassword    
+            user: process.env.MY_EMAIL, // Render-ல் உள்ள உங்களது ஜிமெயில் ஐடி
+            pass: cleanPassword        // உங்களது ஜிமெயில் ஆப் பாஸ்வே้ர்ட் (App Password)
         }
     });
 
@@ -128,16 +132,16 @@ async function sendEmailData(userData) {
     };
 
     try {
-        console.log("Attempting to send email...");
-        // நீங்கள் கேட்ட எளிய sendMail வடிவம்
+        console.log("Attempting to send email via Google SMTP...");
         await transporter.sendMail(mailOptions);
         console.log("Lead details emailed to Rakesh successfully! ✅");
     } catch (err) {
-        // மெயில் போவதில் சிக்கல் இருந்தால் சர்வர் டைம்-அவுட் ஆகி கிராஷ் ஆகாமல் தடுத்து லாக் காட்டும்
-        console.error("Email Delivery Failed: ❌", err.message);
+        // கூகுள் ஏதேனும் செக்யூரிட்டி பிளாக் செய்தாலும் சர்வர் கிராஷ் (Timeout 90000ms) ஆகாமல் லாக் மட்டும் காட்டும்!
+        console.error("Google SMTP Delivery Failed: ❌ Reason:", err.message);
     }
 }
 
+// பாட் /start கமாண்ட் லாஜிக்
 bot.start((ctx) => {
     const userId = ctx.from.id;
     userSessions[userId] = { stage: 'CHOOSE_LANG' };
