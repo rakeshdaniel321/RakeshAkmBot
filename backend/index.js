@@ -1,31 +1,34 @@
 const { Telegraf, Markup } = require('telegraf');
 const express = require('express');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend'); // Resend பேக்கேஜ் இணைக்கப்பட்டுள்ளது
 require('dotenv').config();
 const dns = require('dns');
 const axios = require('axios');
 
-// Render-ல் ஏற்படும் சில DNS பிரச்சனைகளைத் தவிர்க்க கூகுள் DNS செட் செய்யப்படுகிறது
+// Render DNS செட்டிங்ஸ்
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// Resend SDK-வை உன்னுடைய API Key மூலம் தொடங்குதல்
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 app.get('/', (req, res) => {
-    res.send('Rakesh Daniel Portfolio Bot is Alive and Running! 🚀');
+    res.send('Rakesh Daniel Portfolio Bot is Alive and Running via Resend! 🚀');
 });
 
-// Render Self-Ping லாஜிக் (சர்வர் தூங்காமல் (Sleep) இருக்க)
+// Render Self-Ping லாஜிக் (சர்வர் தூங்காமல் இருக்க)
 setInterval(() => {
     axios.get('https://rakeshakmbot.onrender.com') 
         .then(() => console.log('Self-Ping Success: Keeping the bot awake! ⚡'))
         .catch((err) => console.error('Self-Ping Error:', err.message));
-}, 10 * 60 * 1000); // ஒவ்வொரு 10 நிமிடத்திற்கும் பிங் செய்யும்
+}, 10 * 60 * 1000);
 
 // யூஸர் செஷன் மேனேஜ்மென்ட்
 const userSessions = {};
 
-// 3 மொழிகளுக்கான மெசேஜ் டெம்ப்ளேட்ஸ் (Localization)
+// 3 மொழிகளுக்கான மெசேஜ் டெம்ப்ளேட்ஸ்
 const textTemplates = {
     EN: {
         welcome: "Hello! Welcome to Rakesh Daniel's Assistant Bot. 🧑‍💻\n\nWhat is your name?",
@@ -43,7 +46,7 @@ const textTemplates = {
     TA: {
         welcome: "வணக்கம்! ராகேஷ் டேனியலின் அசிஸ்டண்ட் போட்டிற்கு உங்களை வரவேற்கிறோம். 🧑‍💻\n\nஉங்க பெயர் என்ன?",
         ask_interest: (name) => `மகிழ்ச்சி ${name}! உங்களுக்கு ராகேஷ் பற்றி என்ன விபரம் தெரிய வேண்டும்? ஒரு ஆப்ஷனை தேர்ந்தெடுக்கவும்:`,
-        about: "🧑‍💻 *ராகேஷ் டேனியல்*\n*வேலை:* Full-Stack Web Developer (MERN & Next.js)\n*சுருக்கம்:* தூய்மையான கோடிங் மற்றும் சிறந்த பேக்-எண்ட் ஆர்கிடெக்சர் அமைப்பதில் ஆர்வம் கொண்டவர்.\n*ஊர்:* திருநெல்வேலி, தமிழ்நாடு\n*Portfolio:* https://rakesh-akm-portfolio.netlify.app",
+        about: "🧑‍💻 *ராகேஷ் டேனியல்*\n*வேலை:* Full-Stack Web Developer (MERN & Next.js)\n*சுருக்கம்:* தூய்மையான கோடிங் மற்றும் சிறந்த பேக்-எண்ட் ஆர்கிடெக்சர் அமைப்பதில் ஆர்வம் கொண்டவர்.\n*ஊர்:* திருநெல்வே利, தமிழ்நாடு\n*Portfolio:* https://rakesh-akm-portfolio.netlify.app",
         projects: "🚀 *முக்கிய பிராஜெக்ட்கள்:* \n\n1️⃣ *Secure User Login System (Backend)*\n- Token Bucket Algorithm, Redis, BullMQ உபயோகித்து உருவாக்கப்பட்டது.\n- JWT tokens & HTTP-Only cookies பாதுகாப்பு.\n\n2️⃣ *Hotel Booking System (MERN)*\n- Live Link: https://hotel-booking-management-navy.vercel.app \n\n3️⃣ *Mobile Shop E-Commerce (Next.js)*\n- ரியல்-டைம் ஃபில்டரிங் மற்றும் ஆப்டிமைஸ்டு MongoDB குவரிகள்.",
         resume: "📄 *ரெஸ்யூமே விபரங்கள்:*\n- *படிப்பு:* BCA (2023-2026), மனோன்மணீயம் சுந்தரனார் பல்கலைக்கழகம்.\n- *திறமைகள்:* JavaScript, React.js, Node.js, Express.js, MongoDB, Redis.\n- *சான்றிதழ்:* FSD Master Class (NoviTech).\n- *தொடர்புக்கு:* +91 6379769075 | rakeshdaniel321@gmail.com",
         ask_from: "நீங்கள் எந்த ஊரில் இருந்து மெசேஜ் செய்கிறீர்கள்? (ஊரின் பெயரை டைப் செய்யவும்)",
@@ -100,47 +103,45 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-// ஜிமெயில் அனுப்பும் ஃபங்ஷன் (IPv6 நெட்வொர்க் பிளாக் எர்ரர் முற்றிலும் சரிசெய்யப்பட்ட வடிவம்)
-async function sendEmailData(userData) {
-    const cleanPassword = process.env.EMAIL_PASSWORD ? process.env.EMAIL_PASSWORD.replace(/\s+/g, '') : '';
-
-    const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true, // Port 465 என்பதால் true
-        connectionTimeout: 15000,
-        socketTimeout: 15000,
-        // Render கிளவுட் சர்வருக்கான பிரத்யேக நெட்வொர்க் செட்டிங் (Force IPv4)
-        connectionOptions: {
-            family: 4 // இது ENETUNREACH IPv6 எர்ரர் வராமல் தடுத்து IPv4-ல் மெயில் அனுப்பும்!
-        },
-        auth: {
-            user: process.env.MY_EMAIL, 
-            pass: cleanPassword        
-        }
-    });
-
-    let mailOptions = {
-        from: process.env.MY_EMAIL,
-        to: process.env.MY_EMAIL,
-        subject: `New Portfolio Lead: ${userData.name || 'Unknown'} (${userData.lang || 'N/A'})`,
-        text: `Rakesh, உங்களது போட்டிலிருந்து வந்த புதிய விபரம்:\n\n` +
-              `User Name: ${userData.name || 'N/A'}\n` +
-              `Selected Language: ${userData.lang || 'N/A'}\n` +
-              `From (Oor): ${userData.from || 'N/A'}\n` +
-              `Interested In: ${userData.interest || 'N/A'}\n\n` +
-              `-- FLAMES Data --\n` +
-              `User Name for FLAMES: ${userData.flamesName1 || 'N/A'}\n` +
-              `Partner Name for FLAMES: ${userData.flamesName2 || 'N/A'}\n` +
-              `FLAMES Result: ${userData.flamesResult || 'Not Played'}\n`
-    };
-
+// 📧 புதிய Resend மெயில் அனுப்பும் ஃபங்ஷன் (தலைவலி இல்லாத API முறை)
+async function sendResendEmail(userData) {
     try {
-        console.log("Attempting to send email via Google SMTP (Forced IPv4)...");
-        await transporter.sendMail(mailOptions);
-        console.log("Lead details emailed to Rakesh successfully! ✅");
+        console.log('[Resend]: Attempting to send email via HTTP API...');
+        
+        const htmlContent = `
+            <div style="font-family: sans-serif; padding: 20px; max-width: 600px; border: 1px solid #eee; border-radius: 8px;">
+                <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">New Portfolio Lead Details</h2>
+                <p><strong>User Name:</strong> ${userData.name || 'N/A'}</p>
+                <p><strong>Selected Language:</strong> ${userData.lang || 'N/A'}</p>
+                <p><strong>From (Oor):</strong> ${userData.from || 'N/A'}</p>
+                <p><strong>Interested In:</strong> ${userData.interest || 'N/A'}</p>
+                <br/>
+                <h3 style="color: #555;">🔥 FLAMES Game Data</h3>
+                <p><strong>User Name for FLAMES:</strong> ${userData.flamesName1 || 'N/A'}</p>
+                <p><strong>Partner Name for FLAMES:</strong> ${userData.flamesName2 || 'N/A'}</p>
+                <p><strong>FLAMES Result:</strong> <span style="color: #ff4757; font-weight: bold;">${userData.flamesResult || 'Not Played'}</span></p>
+                <hr style="border: 0; border-top: 1px solid #eee;" />
+                <p style="font-size: 11px; color: #999;">Sent via Rakesh Daniel Bot Service.</p>
+            </div>
+        `;
+
+        const { data, error } = await resend.emails.send({
+            from: 'Rakesh Bot <onboarding@resend.dev>', // இலவச அக்கவுண்டிற்கு இதை மாற்றக் கூடாது
+            to: [process.env.MY_EMAIL],                 // Render-ல் நீ கொடுத்த உன்னுடைய ஜிமெயில் ஐடிக்கு வரும்
+            subject: `🚀 New Lead: ${userData.name || 'Unknown'}`,
+            html: htmlContent
+        });
+
+        if (error) {
+            console.error('[Resend SDK Error]: ❌', error.message);
+            return { success: false, error };
+        }
+
+        console.log('[Resend Email Sent Successfully]: ✅ ID:', data.id);
+        return { success: true, data };
     } catch (err) {
-        console.error("Google SMTP Delivery Failed: ❌ Reason:", err.message);
+        console.error('[Resend System Crash]: ❌', err.message);
+        return { success: false, error: err };
     }
 }
 
@@ -159,7 +160,7 @@ bot.start((ctx) => {
     );
 });
 
-// பட்டன் க்ளிக்குகளை ஹேண்டில் செய்ய (Action Listeners)
+// பட்டன் க்ளிக்குகளை ஹேண்டில் செய்ய
 bot.action(/LANG_(EN|TA|TG)/, (ctx) => {
     const userId = ctx.from.id;
     const lang = ctx.match[1];
@@ -207,7 +208,7 @@ bot.action(/FLAMES_(YES|NO)/, async (ctx) => {
         ctx.reply(textTemplates[lang].flames_n1);
     } else {
         ctx.reply(textTemplates[lang].bye);
-        await sendEmailData(session);
+        await sendResendEmail(session);
         delete userSessions[userId];
     }
     ctx.answerCbQuery();
@@ -225,7 +226,6 @@ bot.on('text', async (ctx) => {
 
     const lang = session.lang;
 
-    // 1. பெயர் வாங்குதல்
     if (session.stage === 'ASK_NAME') {
         session.name = text;
         session.stage = 'CHOOSING_INTEREST';
@@ -241,7 +241,6 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    // 2. ஊர் வாங்குதல்
     if (session.stage === 'ASK_FROM') {
         session.from = text;
         session.stage = 'FLAMES_DECISION';
@@ -256,7 +255,6 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    // 3. FLAMES முதல் பெயர்
     if (session.stage === 'FLAMES_NAME1') {
         session.flamesName1 = text;
         session.stage = 'FLAMES_NAME2';
@@ -264,7 +262,6 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    // 4. FLAMES இரண்டாம் பெயர் + முடிவு + மெயில் அனுப்புதல்
     if (session.stage === 'FLAMES_NAME2') {
         session.flamesName2 = text;
         const result = calculateFlames(session.flamesName1, session.flamesName2);
@@ -272,10 +269,9 @@ bot.on('text', async (ctx) => {
 
         ctx.replyWithMarkdown(textTemplates[lang].flames_res(result));
 
-        // விபரங்களை உங்களுடைய ஜிமெயிலுக்கு அனுப்பும்
-        await sendEmailData(session);
+        // Resend மூலம் மெயில் அனுப்புதல்
+        await sendResendEmail(session);
 
-        // செஷனை க்ளியர் செய்தல்
         delete userSessions[userId];
         return;
     }
@@ -285,7 +281,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server is perfectly running on port ${PORT}`);
     bot.launch();
-    console.log("Rakesh Daniel's Multi-language Bot is Online! 🤖✅");
+    console.log("Rakesh Daniel's Multi-language Bot is Online via Resend! 🤖✅");
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
