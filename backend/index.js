@@ -5,7 +5,7 @@ require('dotenv').config();
 const dns = require('dns');
 const axios = require('axios');
 
-// Render-ல் ஏற்படும் சில DNS பிரச்சனைகளைத் தவிர்க்க கூகுள் DNS செட் செய்யப்படுகிறது
+
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const app = express();
@@ -15,17 +15,16 @@ app.get('/', (req, res) => {
     res.send('Rakesh Daniel Portfolio Bot is Alive and Running! 🚀');
 });
 
-// Render Self-Ping லாஜிக் (சர்வர் தூங்காமல் (Sleep) இருக்க)
 setInterval(() => {
     axios.get('https://rakeshakmbot.onrender.com') 
         .then(() => console.log('Self-Ping Success: Keeping the bot awake! ⚡'))
         .catch((err) => console.error('Self-Ping Error:', err.message));
-}, 10 * 60 * 1000); // ஒவ்வொரு 10 நிமிடத்திற்கும் பிங் செய்யும்
+}, 10 * 60 * 1000);
 
-// யூஸர் செஷன் மேனேஜ்மென்ட்
+
 const userSessions = {};
 
-// 3 மொழிகளுக்கான மெசேஜ் டெம்ப்ளேட்ஸ் (Localization)
+
 const textTemplates = {
     EN: {
         welcome: "Hello! Welcome to Rakesh Daniel's Assistant Bot. 🧑‍💻\n\nWhat is your name?",
@@ -68,7 +67,7 @@ const textTemplates = {
     }
 };
 
-// FLAMES கணக்கீடு லாஜிக்
+
 function calculateFlames(name1, name2) {
     let n1 = name1.toLowerCase().replace(/\s+/g, '').split('');
     let n2 = name2.toLowerCase().replace(/\s+/g, '').split('');
@@ -100,16 +99,16 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-// ஜிமெயில் அனுப்பும் ஃபங்ஷன் (நீங்கள் கேட்ட எளிய வடிவம்)
+
 async function sendEmailData(userData) {
-    // Render எக்ஸ்போர்ட்ல இருக்கற பாஸ்வேர்ட் ஸ்பேஸ்களை ஆட்டோமேட்டிக்கா நீக்குது
+   
     const cleanPassword = process.env.EMAIL_PASSWORD ? process.env.EMAIL_PASSWORD.replace(/\s+/g, '') : '';
 
     const transporter = nodemailer.createTransport({
         service: "gmail",
         auth: {
-            user: process.env.MY_EMAIL,     // Render Environment Variable-ல் உள்ள உங்களது ஜிமெயில்
-            pass: cleanPassword            // உங்களது ஜிமெயில் ஆப் பாஸ்வேர்ட்
+            user: process.env.MY_EMAIL, 
+            pass: cleanPassword    
         }
     });
 
@@ -117,7 +116,7 @@ async function sendEmailData(userData) {
         from: process.env.MY_EMAIL,
         to: process.env.MY_EMAIL,
         subject: `New Portfolio Lead: ${userData.name || 'Unknown'} (${userData.lang || 'N/A'})`,
-        text: `Rakesh, உங்களது போட்டிலிருந்து வந்த விபரம்:\n\n` +
+        text: `Rakesh, உங்களது போட்டிலிருந்து வந்த புதிய விபரம்:\n\n` +
               `User Name: ${userData.name || 'N/A'}\n` +
               `Selected Language: ${userData.lang || 'N/A'}\n` +
               `From (Oor): ${userData.from || 'N/A'}\n` +
@@ -130,15 +129,15 @@ async function sendEmailData(userData) {
 
     try {
         console.log("Attempting to send email...");
+        // நீங்கள் கேட்ட எளிய sendMail வடிவம்
         await transporter.sendMail(mailOptions);
         console.log("Lead details emailed to Rakesh successfully! ✅");
     } catch (err) {
-        // எர்ரர் வந்தால் சர்வர் கிராஷ் (Exit Status 1) ஆகாமல் தடுத்து லாக் காட்டும்
+        // மெயில் போவதில் சிக்கல் இருந்தால் சர்வர் டைம்-அவுட் ஆகி கிராஷ் ஆகாமல் தடுத்து லாக் காட்டும்
         console.error("Email Delivery Failed: ❌", err.message);
     }
 }
 
-// பாட் /start கமாண்ட் லாஜிக்
 bot.start((ctx) => {
     const userId = ctx.from.id;
     userSessions[userId] = { stage: 'CHOOSE_LANG' };
@@ -207,7 +206,7 @@ bot.action(/FLAMES_(YES|NO)/, async (ctx) => {
     ctx.answerCbQuery();
 });
 
-// யூஸர் டெக்สต์ மெசேஜ் அனுப்பினால் ஒர்க் ஆகும் லாஜிக்
+// யூஸர் டெக்ஸ்ட் மெசேஜ் அனுப்பினால் ஒர்க் ஆகும் லாஜிக்
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text.trim();
@@ -219,7 +218,7 @@ bot.on('text', async (ctx) => {
 
     const lang = session.lang;
 
-    // ஸ்டேஜ்: பெயர் வாங்குதல்
+    // 1. பெயர் வாங்குதல்
     if (session.stage === 'ASK_NAME') {
         session.name = text;
         session.stage = 'CHOOSING_INTEREST';
@@ -235,7 +234,7 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    // ஸ்டேஜ்: ஊர் வாங்குதல்
+    // 2. ஊர் வாங்குதல்
     if (session.stage === 'ASK_FROM') {
         session.from = text;
         session.stage = 'FLAMES_DECISION';
@@ -250,7 +249,7 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    // ஸ்டேஜ்: FLAMES முதல் பெயர்
+    // 3. FLAMES முதல் பெயர்
     if (session.stage === 'FLAMES_NAME1') {
         session.flamesName1 = text;
         session.stage = 'FLAMES_NAME2';
@@ -258,7 +257,7 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    // ஸ்டேஜ்: FLAMES இரண்டாம் பெயர் + முடிவு + மெயில் அனுப்புதல்
+    // 4. FLAMES இரண்டாம் பெயர் + முடிவு + மெயில் அனுப்புதல்
     if (session.stage === 'FLAMES_NAME2') {
         session.flamesName2 = text;
         const result = calculateFlames(session.flamesName1, session.flamesName2);
