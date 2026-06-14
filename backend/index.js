@@ -4,21 +4,23 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 const dns = require('dns');
 const axios = require('axios');
+
+// Render-ல் ஏற்படும் சில DNS பிரச்சனைகளைத் தவிர்க்க கூகுள் DNS செட் செய்யப்படுகிறது
 dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 app.get('/', (req, res) => {
-    res.send('Rakesh Daniel Portfolio Bot is Alive and Running! ');
+    res.send('Rakesh Daniel Portfolio Bot is Alive and Running! 🚀');
 });
-// Render  Self-Ping 
 
+// Render Self-Ping லாஜிக் (சர்வர் தூங்காமல் (Sleep) இருக்க)
 setInterval(() => {
-   
     axios.get('https://rakeshakmbot.onrender.com') 
         .then(() => console.log('Self-Ping Success: Keeping the bot awake! ⚡'))
         .catch((err) => console.error('Self-Ping Error:', err.message));
-}, 10 * 60 * 1000); // ஒவ்வொரு 10 நிமிடத்திற்கும் (10 minutes) பிங் செய்யும்
+}, 10 * 60 * 1000); // ஒவ்வொரு 10 நிமிடத்திற்கும் பிங் செய்யும்
 
 // யூஸர் செஷன் மேனேஜ்மென்ட்
 const userSessions = {};
@@ -98,13 +100,16 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-// ஜிமெயில் அனுப்பும் ஃபங்ஷன்
+// ஜிமெயில் அனுப்பும் ஃபங்ஷன் (நீங்கள் கேட்ட எளிய வடிவம்)
 async function sendEmailData(userData) {
-    let transporter = nodemailer.createTransport({
-        service: 'gmail',
+    // Render எக்ஸ்போர்ட்ல இருக்கற பாஸ்வேர்ட் ஸ்பேஸ்களை ஆட்டோமேட்டிக்கா நீக்குது
+    const cleanPassword = process.env.EMAIL_PASSWORD ? process.env.EMAIL_PASSWORD.replace(/\s+/g, '') : '';
+
+    const transporter = nodemailer.createTransport({
+        service: "gmail",
         auth: {
-            user: process.env.MY_EMAIL,
-            pass: process.env.EMAIL_PASSWORD
+            user: process.env.MY_EMAIL,     // Render Environment Variable-ல் உள்ள உங்களது ஜிமெயில்
+            pass: cleanPassword            // உங்களது ஜிமெயில் ஆப் பாஸ்வேர்ட்
         }
     });
 
@@ -124,10 +129,12 @@ async function sendEmailData(userData) {
     };
 
     try {
+        console.log("Attempting to send email...");
         await transporter.sendMail(mailOptions);
         console.log("Lead details emailed to Rakesh successfully! ✅");
     } catch (err) {
-        console.error("Email delivery failed: ❌", err);
+        // எர்ரர் வந்தால் சர்வர் கிராஷ் (Exit Status 1) ஆகாமல் தடுத்து லாக் காட்டும்
+        console.error("Email Delivery Failed: ❌", err.message);
     }
 }
 
@@ -136,7 +143,6 @@ bot.start((ctx) => {
     const userId = ctx.from.id;
     userSessions[userId] = { stage: 'CHOOSE_LANG' };
 
-    // மொழி தேர்வு செய்ய பட்டன்கள்
     ctx.reply(
         "Choose your preferred language / உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்:",
         Markup.inlineKeyboard([
@@ -150,7 +156,7 @@ bot.start((ctx) => {
 // பட்டன் க்ளிக்குகளை ஹேண்டில் செய்ய (Action Listeners)
 bot.action(/LANG_(EN|TA|TG)/, (ctx) => {
     const userId = ctx.from.id;
-    const lang = ctx.match[1]; // EN, TA, or TG
+    const lang = ctx.match[1];
 
     if (!userSessions[userId]) userSessions[userId] = {};
     
@@ -176,7 +182,6 @@ bot.action(/INT_(ABOUT|PROJECTS|RESUME)/, async (ctx) => {
     if (actionType === 'RESUME') ctx.replyWithMarkdown(textTemplates[lang].resume);
 
     session.stage = 'ASK_FROM';
-    // 1 செகண்ட் கேப்பில் அடுத்த கேள்வியை கேட்கும்
     setTimeout(() => {
         ctx.reply(textTemplates[lang].ask_from);
     }, 1000);
@@ -202,7 +207,7 @@ bot.action(/FLAMES_(YES|NO)/, async (ctx) => {
     ctx.answerCbQuery();
 });
 
-// யூஸர் டெக்ஸ்ட் மெசேஜ் அனுப்பினால் ஒர்க் ஆகும் லாஜிக்
+// யூஸர் டெக்สต์ மெசேஜ் அனுப்பினால் ஒர்க் ஆகும் லாஜிக்
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text.trim();
@@ -261,7 +266,7 @@ bot.on('text', async (ctx) => {
 
         ctx.replyWithMarkdown(textTemplates[lang].flames_res(result));
 
-        // விபரங்களை உங்களுடைய ஜிமெயிலுக்கு (rakeshdaniel321@gmail.com) அனுப்பும்
+        // விபரங்களை உங்களுடைய ஜிமெயிலுக்கு அனுப்பும்
         await sendEmailData(session);
 
         // செஷனை க்ளியர் செய்தல்
