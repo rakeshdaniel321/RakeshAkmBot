@@ -100,19 +100,23 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-// ஜிமெயில் அனுப்பும் ஃபங்ஷன் (கூகுள் டெவலப்பர் ஆப்டிமைஸ்டு + டைம்-அவுட் பாதுகாப்பு வடிவம்)
+// ஜிமெயில் அனுப்பும் ஃபங்ஷன் (IPv6 நெட்வொர்க் பிளாக் எர்ரர் முற்றிலும் சரிசெய்யப்பட்ட வடிவம்)
 async function sendEmailData(userData) {
-    // Render எக்ஸ்போர்ட்ல இருக்கற பாஸ்வேர்ட் ஸ்பேஸ்களை ஆட்டோமேட்டிக்கா நீக்குகிறது
     const cleanPassword = process.env.EMAIL_PASSWORD ? process.env.EMAIL_PASSWORD.replace(/\s+/g, '') : '';
 
     const transporter = nodemailer.createTransport({
-        service: "gmail",
-        connectionTimeout: 10000, // 10 வினாடிகளுக்கு மேல் கூகுள் ரெஸ்பான்ஸ் தராவிட்டால் கனெக்ஷனை கட் செய்துவிடும்
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true, // Port 465 என்பதால் true
+        connectionTimeout: 15000,
+        socketTimeout: 15000,
+        // Render கிளவுட் சர்வருக்கான பிரத்யேக நெட்வொர்க் செட்டிங் (Force IPv4)
+        connectionOptions: {
+            family: 4 // இது ENETUNREACH IPv6 எர்ரர் வராமல் தடுத்து IPv4-ல் மெயில் அனுப்பும்!
+        },
         auth: {
-            user: process.env.MY_EMAIL, // Render-ல் உள்ள உங்களது ஜிமெயில் ஐடி
-            pass: cleanPassword        // உங்களது ஜிமெயில் ஆப் பாஸ்வே้ர்ட் (App Password)
+            user: process.env.MY_EMAIL, 
+            pass: cleanPassword        
         }
     });
 
@@ -132,11 +136,10 @@ async function sendEmailData(userData) {
     };
 
     try {
-        console.log("Attempting to send email via Google SMTP...");
+        console.log("Attempting to send email via Google SMTP (Forced IPv4)...");
         await transporter.sendMail(mailOptions);
         console.log("Lead details emailed to Rakesh successfully! ✅");
     } catch (err) {
-        // கூகுள் ஏதேனும் செக்யூரிட்டி பிளாக் செய்தாலும் சர்வர் கிராஷ் (Timeout 90000ms) ஆகாமல் லாக் மட்டும் காட்டும்!
         console.error("Google SMTP Delivery Failed: ❌ Reason:", err.message);
     }
 }
