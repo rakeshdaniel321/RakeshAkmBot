@@ -12,8 +12,11 @@
   "type": "commonjs",
   "dependencies": {
     "axios": "^1.17.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
+    "mongoose": "^9.7.4",
     "nodemailer": "^8.0.11",
     "resend": "^6.12.4",
     "telegraf": "^4.16.3"
