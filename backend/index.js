@@ -20,7 +20,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // 🗄️ மெயின் ஒருங்கிணைக்கப்பட்ட டேட்டாவை சேமிக்க
 const trackedUsers = {};  
-// தற்காலிக டைமர்களைச் சேமிக்க (For Drop-out detection)
+// தற்காலிக டைமர்களைச் சேமிக்க
 const sessionTimers = {}; 
 
 const textTemplates = {
@@ -50,7 +50,7 @@ const textTemplates = {
         ask_from: "நீங்கள் எந்த ஊரில் இருந்து மெசேஜ் செய்கிறீர்கள்? (ஊரின் பெயரை டைப் செய்யவும்)",
         ask_flames: "அருமை! நாம் இப்போது ஒரு ஜாலியான FLAMES விளையாட்டு விளையாடலாமா? 🥳",
         flames_n1: "சூப்பர்! முதலில் உங்களுடைய பெயரை டைப் செய்யுங்கள்:",
-        flames_n2: "இப்போது உங்களுடைய பார்ட்னர் (Partner) பெயரை ტიப் செய்யுங்கள்:",
+        flames_n2: "இப்போது உங்களுடைய பார்ட்னர் (Partner) பெயரை டைப் செய்யுங்கள்:",
         flames_res: (res) => `🥳 உங்களுடைய FLAMES ரிசல்ட்: *${res}*\n\nராகேஷின் போட்டை பயன்படுத்தியதற்கு மிக்க நன்றி!`,
         bye: "விபரங்களைப் பார்த்ததற்கு நன்றி! உங்களுடைய தகவல்கள் ராகேஷிற்கு அனுப்பப்பட்டது."
     },
@@ -121,13 +121,13 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-// 📧 ஒரு குறிப்பிட்ட பயனருக்கு மட்டும் உடனடியாக அதிவேக PDF மெயில் அனுப்பும் ஃபங்ஷன்
+// 📧 PDF மெயில் அனுப்பும் ஃபங்ஷன்
 async function sendInstantUserPDF(tgId, triggerReason) {
     try {
         const u = trackedUsers[tgId];
         if (!u) return;
 
-        console.log(`[Instant Mail]: Generating PDF for ${tgId} due to: ${triggerReason}`);
+        console.log(`[Instant Mail]: Generating PDF for ${tgId}`);
         const pdfDoc = new PDFDocument();
         let pdfBuffers = [];
         pdfDoc.on('data', chunk => pdfBuffers.push(chunk));
@@ -136,8 +136,7 @@ async function sendInstantUserPDF(tgId, triggerReason) {
         pdfDoc.fontSize(11).fillColor('#64748B').text(`Alert Trigger: ${triggerReason} | Time: ${new Date().toLocaleString('en-IN')}\n`, { align: 'center' });
         pdfDoc.moveDown();
 
-        // PDFKit எமோஜிகளால் ஏற்படும் என்கோடிங் பிழைகளைத் (Garbage Character) தவிர்க்க எமோஜிகள் நீக்கப்பட்டுள்ளன
-        pdfDoc.fontSize(13).fillColor('#0284C7').text(`User Metrics - Telegram ID: ${tgId} (${u.username})`, { bold: true });
+        pdfDoc.fontSize(13).fillColor('#0284C7').text(`User Metrics - Telegram ID: ${tgId} (${u.username})`);
         pdfDoc.fontSize(10).fillColor('#334155').text(
             `Current Bot Stage : ${u.botStage}\n` +
             `Bot Given Name   : ${u.botName}\n` +
@@ -164,12 +163,12 @@ async function sendInstantUserPDF(tgId, triggerReason) {
             from: 'Rakesh Instant Alert <onboarding@resend.dev>',
             to: [process.env.MY_EMAIL],
             subject: `🚨 [${triggerReason}] User Session Alert - ID: ${tgId}`,
-            html: `<h3>New User Status Update</h3><p>User <b>${u.botName}</b> (${tgId}) triggered an instant report via: <b>${triggerReason}</b>. Complete analytics PDF attached.</p>`,
+            html: `<h3>New User Status Update</h3><p>User <b>${u.botName}</b> (${tgId}) triggered an instant report. Analytics PDF attached.</p>`,
             attachments: [
                 {
                     filename: `User_Session_${tgId}.pdf`,
                     content: pdfBuffer.toString('base64'),
-                    contentType: 'application/vnd.openxmlformats-officedocument.pdf'
+                    contentType: 'application/pdf'
                 }
             ]
         });
@@ -179,46 +178,63 @@ async function sendInstantUserPDF(tgId, triggerReason) {
     }
 }
 
-// ⏱️ பயனர் பாதியில் வெளியேறுவதைக் கண்டறியும் டைமர் மேனேஜர் (Inactivity Handler)
+// ⏱️ Drop-out டைமர்
 function handleUserActivityTimeout(tgId) {
     if (sessionTimers[tgId]) clearTimeout(sessionTimers[tgId]);
 
     sessionTimers[tgId] = setTimeout(() => {
         const u = trackedUsers[tgId];
-        if (u && u.botStage !== 'ALL_DONE' && u.botStage !== 'COMPLETED_NO_FLAMES') {
+        if (u && u.botStage !== 'ALL_DONE' && u.botStage !== 'COMPLETED_NO_FLAMES' && !u.botStage.includes('DROPPED_OUT')) {
             u.botStage = `${u.botStage}_(DROPPED_OUT)`;
             sendInstantUserPDF(tgId, 'USER_DROPPED_OUT_INACTIVE');
         }
     }, 5 * 60 * 1000); 
 }
 
-// 🌐 REACT API ROUTES
+// 🌐 REACT API ROUTES (With try-catch)
 app.post('/api/save-metrics', (req, res) => {
-    const { telegramId, browser, screenSize, latitude, longitude, resolvedLocation } = req.body;
-    initUserSession(telegramId);
-    
-    trackedUsers[telegramId].browser = browser ? browser.substring(0, 50) : 'N/A';
-    trackedUsers[telegramId].screenSize = screenSize || 'N/A';
-    trackedUsers[telegramId].resolvedLocation = resolvedLocation || 'N/A';
-    trackedUsers[telegramId].usageFrequency += 1;
-    
-    res.sendStatus(200);
+    try {
+        const { telegramId, browser, screenSize, latitude, longitude, resolvedLocation } = req.body;
+        if(!telegramId) return res.status(400).send("Missing ID");
+
+        initUserSession(telegramId);
+        
+        trackedUsers[telegramId].browser = browser ? browser.substring(0, 80) : 'N/A';
+        trackedUsers[telegramId].screenSize = screenSize || 'N/A';
+        trackedUsers[telegramId].resolvedLocation = resolvedLocation || 'N/A';
+        trackedUsers[telegramId].usageFrequency += 1;
+        
+        return res.sendStatus(200);
+    } catch(err) {
+        console.error("API Error:", err.message);
+        return res.sendStatus(500);
+    }
 });
 
 app.post('/api/update-screen-time', (req, res) => {
-    const { telegramId, screenTime } = req.body;
-    initUserSession(telegramId);
-    trackedUsers[telegramId].screenTime += screenTime;
-    res.sendStatus(200);
+    try {
+        const { telegramId, screenTime } = req.body;
+        if(!telegramId) return res.status(400).send("Missing ID");
+        initUserSession(telegramId);
+        trackedUsers[telegramId].screenTime += Number(screenTime || 0);
+        return res.sendStatus(200);
+    } catch(err) {
+        return res.sendStatus(500);
+    }
 });
 
 app.post('/api/track-page', (req, res) => {
-    const { telegramId, page } = req.body;
-    initUserSession(telegramId);
-    if (!trackedUsers[telegramId].visitedPages.includes(page)) {
-        trackedUsers[telegramId].visitedPages.push(page);
+    try {
+        const { telegramId, page } = req.body;
+        if(!telegramId) return res.status(400).send("Missing ID");
+        initUserSession(telegramId);
+        if (page && !trackedUsers[telegramId].visitedPages.includes(page)) {
+            trackedUsers[telegramId].visitedPages.push(page);
+        }
+        return res.sendStatus(200);
+    } catch(err) {
+        return res.sendStatus(500);
     }
-    res.sendStatus(200);
 });
 
 // 🤖 TELEGRAM BOT LOGIC
@@ -230,7 +246,6 @@ bot.start((ctx) => {
     trackedUsers[userId].botStage = 'CHOOSE_LANG';
     handleUserActivityTimeout(userId);
 
-    // 🎯 பட்டன் லிங்க்கின் பின்னாடி ?tgId=${userId} பேராமீட்டரைச் சேர்த்து வெப்சைட்டிற்கு அனுப்புகிறோம்!
     const portfolioUrl = `https://rakesh-akm-portfolio.netlify.app/?tgId=${userId}`;
 
     ctx.reply(
@@ -241,7 +256,7 @@ bot.start((ctx) => {
             [Markup.button.callback('தமிழ் 🇮🇳', 'LANG_TA')],
             [Markup.button.callback('Tanglish ✍️', 'LANG_TG')]
         ])
-    );
+    ).catch(err => console.error("Bot Reply Error:", err.message));
 });
 
 bot.action(/LANG_(EN|TA|TG)/, (ctx) => {
@@ -252,8 +267,8 @@ bot.action(/LANG_(EN|TA|TG)/, (ctx) => {
     trackedUsers[userId].lang = lang;
     trackedUsers[userId].botStage = 'ASK_NAME';
     handleUserActivityTimeout(userId);
-    ctx.answerCbQuery();
-    ctx.reply(textTemplates[lang].welcome);
+    ctx.answerCbQuery().catch(() => {});
+    ctx.reply(textTemplates[lang].welcome).catch(() => {});
 });
 
 bot.action(/INT_(ABOUT|PROJECTS|RESUME)/, (ctx) => {
@@ -263,14 +278,14 @@ bot.action(/INT_(ABOUT|PROJECTS|RESUME)/, (ctx) => {
     if (!session) return ctx.reply("Please /start again.");
     const lang = session.lang;
 
-    if (actionType === 'ABOUT') ctx.replyWithMarkdown(textTemplates[lang].about);
-    if (actionType === 'PROJECTS') ctx.replyWithMarkdown(textTemplates[lang].projects);
-    if (actionType === 'RESUME') ctx.replyWithMarkdown(textTemplates[lang].resume);
+    if (actionType === 'ABOUT') ctx.replyWithMarkdown(textTemplates[lang].about).catch(() => {});
+    if (actionType === 'PROJECTS') ctx.replyWithMarkdown(textTemplates[lang].projects).catch(() => {});
+    if (actionType === 'RESUME') ctx.replyWithMarkdown(textTemplates[lang].resume).catch(() => {});
 
     session.botStage = 'ASK_FROM';
     handleUserActivityTimeout(userId);
-    setTimeout(() => { ctx.reply(textTemplates[lang].ask_from); }, 1000);
-    ctx.answerCbQuery();
+    setTimeout(() => { ctx.reply(textTemplates[lang].ask_from).catch(() => {}); }, 1000);
+    ctx.answerCbQuery().catch(() => {});
 });
 
 bot.action(/FLAMES_(YES|NO)/, (ctx) => {
@@ -283,14 +298,14 @@ bot.action(/FLAMES_(YES|NO)/, (ctx) => {
     if (choice === 'YES') {
         session.botStage = 'FLAMES_NAME1';
         handleUserActivityTimeout(userId);
-        ctx.reply(textTemplates[lang].flames_n1);
+        ctx.reply(textTemplates[lang].flames_n1).catch(() => {});
     } else {
-        ctx.reply(textTemplates[lang].bye);
+        ctx.reply(textTemplates[lang].bye).catch(() => {});
         session.botStage = 'COMPLETED_NO_FLAMES';
         if (sessionTimers[userId]) clearTimeout(sessionTimers[userId]);
         sendInstantUserPDF(userId, 'FLAMES_DECLINED_COMPLETED');
     }
-    ctx.answerCbQuery();
+    ctx.answerCbQuery().catch(() => {});
 });
 
 bot.on('text', async (ctx) => {
@@ -305,33 +320,29 @@ bot.on('text', async (ctx) => {
     if (session.botStage === 'ASK_NAME') {
         session.botName = text;
         session.botStage = 'ASK_EMAIL';
-        ctx.reply(textTemplates[lang].ask_email);
-        return;
+        return ctx.reply(textTemplates[lang].ask_email);
     }
     if (session.botStage === 'ASK_EMAIL') {
         session.botEmail = text;
         session.botStage = 'ASK_AGE';
-        ctx.reply(textTemplates[lang].ask_age);
-        return;
+        return ctx.reply(textTemplates[lang].ask_age);
     }
     if (session.botStage === 'ASK_AGE') {
         session.botAge = text;
         session.botStage = 'CHOOSING_INTEREST';
-        ctx.reply(textTemplates[lang].ask_interest(session.botName), Markup.inlineKeyboard([
+        return ctx.reply(textTemplates[lang].ask_interest(session.botName), Markup.inlineKeyboard([
             [Markup.button.callback('About Rakesh 🧑‍💻', 'INT_ABOUT')],
             [Markup.button.callback('Projects 🚀', 'INT_PROJECTS')],
             [Markup.button.callback('Resume 📄', 'INT_RESUME')]
         ]));
-        return;
     }
     if (session.botStage === 'ASK_FROM') {
         session.botFrom = text;
         session.botStage = 'FLAMES_DECISION';
-        ctx.reply(textTemplates[lang].ask_flames, Markup.inlineKeyboard([
+        return ctx.reply(textTemplates[lang].ask_flames, Markup.inlineKeyboard([
             [Markup.button.callback('Yes 👍', 'FLAMES_YES')],
             [Markup.button.callback('No 👎', 'FLAMES_NO')]
         ]));
-        return;
     }
     if (session.botStage === 'FLAMES_NAME1') {
         session.flamesName1 = text; 
@@ -346,16 +357,16 @@ bot.on('text', async (ctx) => {
         
         if (sessionTimers[userId]) clearTimeout(sessionTimers[userId]);
         
-        await ctx.replyWithMarkdown(textTemplates[lang].flames_res(result));
+        await ctx.replyWithMarkdown(textTemplates[lang].flames_res(result)).catch(() => {});
         sendInstantUserPDF(userId, 'FLAMES_GAME_FULLY_COMPLETED');
         return;
     }
 });
 
-// ⏰ 5 மணிநேரத்திற்கு ஒருமுறை இயங்கும் மாஸ்டர் எக்செல் பேக்கப் க்ரான் ஜாப்
+// ⏰ 5 மணிநேர எக்செல் க்ரான் ஜாப்
 async function generateAndSend5HourBackup() {
     try {
-        console.log('[Cron Backup]: Preparing 5-Hour Master Excel Report...');
+        console.log('[Cron Backup]: Preparing Report...');
         const now = new Date();
         const dateStr = now.toLocaleDateString('en-IN').replace(/\//g, '-');
 
@@ -375,11 +386,11 @@ async function generateAndSend5HourBackup() {
             { header: 'FLAMES Self Name', key: 'flName1', width: 18 },
             { header: 'FLAMES Partner', key: 'flName2', width: 18 },
             { header: 'FLAMES Result', key: 'flRes', width: 15 },
-            { header: 'Resolved GPS Location (Village/City)', key: 'loc', width: 35 },
-            { header: 'Screen Time (Seconds)', key: 'screenTime', width: 18 },
+            { header: 'Resolved GPS Location', key: 'loc', width: 35 },
+            { header: 'Screen Time (Sec)', key: 'screenTime', width: 18 },
             { header: 'Usage Freq', key: 'freq', width: 12 },
-            { header: 'Device Screen Size', key: 'screenSize', width: 18 },
-            { header: 'Visited Pages Path', key: 'pages', width: 25 },
+            { header: 'Screen Size', key: 'screenSize', width: 18 },
+            { header: 'Visited Pages', key: 'pages', width: 25 },
             { header: 'Browser Agent', key: 'browser', width: 25 }
         ];
 
@@ -412,7 +423,7 @@ async function generateAndSend5HourBackup() {
             from: 'Rakesh Master Backup <onboarding@resend.dev>',
             to: [process.env.MY_EMAIL],
             subject: `📊 Automated 5-Hour Master Excel Log - ${dateStr}`,
-            html: `<p>Hi Rakesh, attached is the comprehensive Excel datasheet compiling all bot and website metrics over the past 5 hours.</p>`,
+            html: `<p>Hi Rakesh, attached is the comprehensive Excel datasheet.</p>`,
             attachments: [
                 {
                     filename: `Master_User_Report_${dateStr}.xlsx`,
