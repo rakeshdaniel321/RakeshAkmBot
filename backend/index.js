@@ -18,7 +18,7 @@ app.use(express.json());
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// 🗄️ மெயின் ஒருங்கிணைக்கப்பட்ட டேட்டாபேஸ்
+// 🗄️ மெயின் ஒருங்கிணைக்கப்பட்ட டேட்டாவை சேமிக்க
 const trackedUsers = {};  
 // தற்காலிக டைமர்களைச் சேமிக்க (For Drop-out detection)
 const sessionTimers = {}; 
@@ -50,7 +50,7 @@ const textTemplates = {
         ask_from: "நீங்கள் எந்த ஊரில் இருந்து மெசேஜ் செய்கிறீர்கள்? (ஊரின் பெயரை டைப் செய்யவும்)",
         ask_flames: "அருமை! நாம் இப்போது ஒரு ஜாலியான FLAMES விளையாட்டு விளையாடலாமா? 🥳",
         flames_n1: "சூப்பர்! முதலில் உங்களுடைய பெயரை டைப் செய்யுங்கள்:",
-        flames_n2: "இப்போது உங்களுடைய பார்ட்னர் (Partner) பெயரை டைப் செய்யுங்கள்:",
+        flames_n2: "இப்போது உங்களுடைய பார்ட்னர் (Partner) பெயரை ტიப் செய்யுங்கள்:",
         flames_res: (res) => `🥳 உங்களுடைய FLAMES ரிசல்ட்: *${res}*\n\nராகேஷின் போட்டை பயன்படுத்தியதற்கு மிக்க நன்றி!`,
         bye: "விபரங்களைப் பார்த்ததற்கு நன்றி! உங்களுடைய தகவல்கள் ராகேஷிற்கு அனுப்பப்பட்டது."
     },
@@ -107,7 +107,7 @@ function calculateFlames(name1, name2) {
         }
     }
     let count = n1.length + n2.length;
-    if (count === 0) return "Friendship 🤝";
+    if (count === 0) return "Friendship";
     let flames = ['F', 'L', 'A', 'M', 'E', 'S'];
     let currIdx = 0;
     while (flames.length > 1) {
@@ -115,8 +115,8 @@ function calculateFlames(name1, name2) {
         flames.splice(currIdx, 1);
     }
     const resultMap = {
-        'F': 'Friends 🤝', 'L': 'Love ❤️', 'A': 'Affection 🥰',
-        'M': 'Marriage 💍', 'E': 'Enemies ⚔️', 'S': 'Siblings 👦👧'
+        'F': 'Friends', 'L': 'Love', 'A': 'Affection',
+        'M': 'Marriage', 'E': 'Enemies', 'S': 'Siblings'
     };
     return resultMap[flames[0]];
 }
@@ -132,26 +132,27 @@ async function sendInstantUserPDF(tgId, triggerReason) {
         let pdfBuffers = [];
         pdfDoc.on('data', chunk => pdfBuffers.push(chunk));
 
-        pdfDoc.fontSize(22).fillColor('#1E3A8A').text('Rakesh Daniel Portfolio Live Session Tracker', { align: 'center' });
+        pdfDoc.fontSize(20).fillColor('#1E3A8A').text('Rakesh Daniel Portfolio Live Session Tracker', { align: 'center' });
         pdfDoc.fontSize(11).fillColor('#64748B').text(`Alert Trigger: ${triggerReason} | Time: ${new Date().toLocaleString('en-IN')}\n`, { align: 'center' });
         pdfDoc.moveDown();
 
-        pdfDoc.fontSize(14).fillColor('#0284C7').text(`👤 User Metrics - Telegram ID: ${tgId} (${u.username})`, { bold: true });
-        pdfDoc.fontSize(11).fillColor('#334155').text(
-            `🏁 Current Bot Stage : ${u.botStage}\n` +
-            `📝 Bot Given Name   : ${u.botName}\n` +
-            `📧 Bot Given Email  : ${u.botEmail}\n` +
-            `🔢 Bot Given Age    : ${u.botAge}\n` +
-            `🌆 User Native City  : ${u.botFrom}\n` +
-            `🔥 FLAMES Self Name : ${u.flamesName1}\n` +
-            `🔥 FLAMES Partner   : ${u.flamesName2}\n` +
-            `🏆 FLAMES Result    : ${u.flamesResult}\n\n` +
-            `📍 GPS True Location: ${u.resolvedLocation}\n` +
-            `⏱️ Total Screen Time : ${u.screenTime} Seconds\n` +
-            `🔄 Interaction Freq  : ${u.usageFrequency} Hits\n` +
-            `📱 Device Resolution: ${u.screenSize}\n` +
-            `🛤️ Visited Web Paths: ${u.visitedPages.length > 0 ? u.visitedPages.join(' -> ') : 'Root / Opened Only'}\n` +
-            `🌐 Browser Client    : ${u.browser}\n`
+        // PDFKit எமோஜிகளால் ஏற்படும் என்கோடிங் பிழைகளைத் (Garbage Character) தவிர்க்க எமோஜிகள் நீக்கப்பட்டுள்ளன
+        pdfDoc.fontSize(13).fillColor('#0284C7').text(`User Metrics - Telegram ID: ${tgId} (${u.username})`, { bold: true });
+        pdfDoc.fontSize(10).fillColor('#334155').text(
+            `Current Bot Stage : ${u.botStage}\n` +
+            `Bot Given Name   : ${u.botName}\n` +
+            `Bot Given Email  : ${u.botEmail}\n` +
+            `Bot Given Age    : ${u.botAge}\n` +
+            `User Native City  : ${u.botFrom}\n` +
+            `FLAMES Self Name : ${u.flamesName1}\n` +
+            `FLAMES Partner   : ${u.flamesName2}\n` +
+            `FLAMES Result    : ${u.flamesResult}\n\n` +
+            `GPS True Location: ${u.resolvedLocation}\n` +
+            `Total Screen Time : ${u.screenTime} Seconds\n` +
+            `Interaction Freq  : ${u.usageFrequency} Hits\n` +
+            `Device Resolution: ${u.screenSize}\n` +
+            `Visited Web Paths: ${u.visitedPages.length > 0 ? u.visitedPages.join(' -> ') : 'Root / Opened Only'}\n` +
+            `Browser Client    : ${u.browser}\n`
         );
         pdfDoc.end();
 
@@ -182,7 +183,6 @@ async function sendInstantUserPDF(tgId, triggerReason) {
 function handleUserActivityTimeout(tgId) {
     if (sessionTimers[tgId]) clearTimeout(sessionTimers[tgId]);
 
-    // ஒரு பயனர் டைப் செய்துவிட்டு 5 நிமிடம் (300000ms) அமைதியாக இருந்தால், மெயில் தானாக அனுப்பப்படும்
     sessionTimers[tgId] = setTimeout(() => {
         const u = trackedUsers[tgId];
         if (u && u.botStage !== 'ALL_DONE' && u.botStage !== 'COMPLETED_NO_FLAMES') {
@@ -221,7 +221,7 @@ app.post('/api/track-page', (req, res) => {
     res.sendStatus(200);
 });
 
-// 🤖 TELEGRAM BOT LOGIC WITH INSTANT EMAIL TRIGGER
+// 🤖 TELEGRAM BOT LOGIC
 bot.start((ctx) => {
     const userId = ctx.from.id;
     const username = ctx.from.username ? `@${ctx.from.username}` : 'No Username';
@@ -230,10 +230,13 @@ bot.start((ctx) => {
     trackedUsers[userId].botStage = 'CHOOSE_LANG';
     handleUserActivityTimeout(userId);
 
+    // 🎯 பட்டன் லிங்க்கின் பின்னாடி ?tgId=${userId} பேராமீட்டரைச் சேர்த்து வெப்சைட்டிற்கு அனுப்புகிறோம்!
+    const portfolioUrl = `https://rakesh-akm-portfolio.netlify.app/?tgId=${userId}`;
+
     ctx.reply(
         `வணக்கம் ${ctx.from.first_name || 'நண்பா'}! உங்கள் மொழியைத் தேர்ந்தெடுக்கவும் / Choose language:`,
         Markup.inlineKeyboard([
-            [Markup.button.webApp('🌐 Open Portfolio Website', 'https://rakesh-akm-portfolio.netlify.app')],
+            [Markup.button.webApp('🌐 Open Portfolio Website', portfolioUrl)],
             [Markup.button.callback('English 🇬🇧', 'LANG_EN')],
             [Markup.button.callback('தமிழ் 🇮🇳', 'LANG_TA')],
             [Markup.button.callback('Tanglish ✍️', 'LANG_TG')]
@@ -341,7 +344,6 @@ bot.on('text', async (ctx) => {
         session.flamesResult = result;
         session.botStage = 'ALL_DONE';
         
-        // டைமரை கிளியர் செய்துவிட்டு உடனடியாக இன்ஸ்டன்ட் மெயில் அனுப்புதல் ⚡
         if (sessionTimers[userId]) clearTimeout(sessionTimers[userId]);
         
         await ctx.replyWithMarkdown(textTemplates[lang].flames_res(result));
@@ -350,7 +352,7 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// ⏰ 5 மணிநேரத்திற்கு ஒருமுறை அனைத்து பயனர்களின் எக்செல் ஷீட்டை அனுப்பும் AUTOMATED CRON BACKUP
+// ⏰ 5 மணிநேரத்திற்கு ஒருமுறை இயங்கும் மாஸ்டர் எக்செல் பேக்கப் க்ரான் ஜாப்
 async function generateAndSend5HourBackup() {
     try {
         console.log('[Cron Backup]: Preparing 5-Hour Master Excel Report...');
