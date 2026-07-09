@@ -1,33 +1,29 @@
 const { Telegraf, Markup } = require('telegraf');
 const express = require('express');
 const { Resend } = require('resend'); 
-const ExcelJS = require('exceljs'); // ExcelJS பேக்கேஜ்
-require('dotenv').config();
+const ExcelJS = require('exceljs');
+const PDFDocument = require('pdfkit');
+const cron = require('node-cron');
+const cors = require('cors');
 const dns = require('dns');
 const axios = require('axios');
+require('dotenv').config();
 
-// Render DNS செட்டிங்ஸ்
+// Render DNS அமைப்புகள்
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const app = express();
+app.use(cors());
+app.use(express.json());
+
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-app.get('/', (req, res) => {
-    res.send('Rakesh Daniel Portfolio Bot with Excel Export is Running! 🚀');
-});
+// 🗄️ டேட்டா ஸ்டோரேஜ் மேனேஜ்மென்ட்
+const trackedUsers = {};  // வெப்சைட் அனலிட்டிக்ஸ் டேட்டா
+const userSessions = {};  // பாட் உரையாடல் செஷன்கள்
 
-// Render Self-Ping லாஜிக்
-setInterval(() => {
-    axios.get('https://rakeshakmbot.onrender.com') 
-        .then(() => console.log('Self-Ping Success: Keeping the bot awake! ⚡'))
-        .catch((err) => console.error('Self-Ping Error:', err.message));
-}, 10 * 60 * 1000);
-
-// யூஸர் செஷன் மேனேஜ்மென்ட்
-const userSessions = {};
-
-// 3 மொழிகளுக்கான மெசேஜ் டெம்ப்ளேட்ஸ் (Email மற்றும் Age கேள்விகள் சேர்க்கப்பட்டுள்ளது)
+// 3 மொழிகளுக்கான மெசேஜ் டெம்ப்ளேட்ஸ்
 const textTemplates = {
     EN: {
         welcome: "Hello! Welcome to Rakesh Daniel's Assistant Bot. 🧑‍💻\n\nWhat is your name?",
@@ -53,7 +49,7 @@ const textTemplates = {
         projects: "🚀 *முக்கிய பிராஜெக்ட்கள்:* \n\n1️⃣ *Secure User Login System (Backend)*\n- Token Bucket Algorithm, Redis, BullMQ உபயோகித்து உருவாக்கப்பட்டது.\n- JWT tokens & HTTP-Only cookies பாதுகாப்பு.\n\n2️⃣ *Hotel Booking System (MERN)*\n- Live Link: https://hotel-booking-management-navy.vercel.app \n\n3️⃣ *Mobile Shop E-Commerce (Next.js)*\n- ரியல்-டைம் ஃபில்டரிங் மற்றும் ஆப்டிமைஸ்டு MongoDB குவரிகள்.",
         resume: "📄 *ரெஸ்யூமே விபரங்கள்:*\n- *படிப்பு:* BCA (2023-2026), மனோன்மணீயம் சுந்தரனார் பல்கலைக்கழகம்.\n- *திறமைகள்:* JavaScript, React.js, Node.js, Express.js, MongoDB, Redis.\n- *சான்றிதழ்:* FSD Master Class (NoviTech).\n- *தொடர்புக்கு:* +91 6379769075 | rakeshdaniel321@gmail.com",
         ask_from: "நீங்கள் எந்த ஊரில் இருந்து மெசேஜ் செய்கிறீர்கள்? (ஊரின் பெயரை டைப் செய்யவும்)",
-        ask_flames: "அருமை! நாம் இப்போது ஒரு ஜாலியான FLAMES விளையாட்டு விளையாடலாமா? 🥳",
+        ask_flames: "அறுமை! நாம் இப்போது ஒரு ஜாலியான FLAMES விளையாட்டு விளையாடலாமா? 🥳",
         flames_n1: "சூப்பர்! முதலில் உங்களுடைய பெயரை டைப் செய்யுங்கள்:",
         flames_n2: "இப்போது உங்களுடைய பார்ட்னர் (Partner) பெயரை டைப் செய்யுங்கள்:",
         flames_res: (res) => `🥳 உங்களுடைய FLAMES ரிசல்ட்: *${res}*\n\nராகேஷின் போட்டை பயன்படுத்தியதற்கு மிக்க நன்றி!`,
@@ -80,7 +76,6 @@ const textTemplates = {
 function calculateFlames(name1, name2) {
     let n1 = name1.toLowerCase().replace(/\s+/g, '').split('');
     let n2 = name2.toLowerCase().replace(/\s+/g, '').split('');
-
     for (let i = 0; i < n1.length; i++) {
         let index = n2.indexOf(n1[i]);
         if (index !== -1) {
@@ -89,18 +84,14 @@ function calculateFlames(name1, name2) {
             i--;
         }
     }
-
     let count = n1.length + n2.length;
     if (count === 0) return "Friendship 🤝";
-
     let flames = ['F', 'L', 'A', 'M', 'E', 'S'];
     let currIdx = 0;
-
     while (flames.length > 1) {
         currIdx = (currIdx + count - 1) % flames.length;
         flames.splice(currIdx, 1);
     }
-
     const resultMap = {
         'F': 'Friends 🤝', 'L': 'Love ❤️', 'A': 'Affection 🥰',
         'M': 'Marriage 💍', 'E': 'Enemies ⚔️', 'S': 'Siblings 👦👧'
@@ -108,93 +99,147 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-// 📊 Excel உருவாக்கி Resend மூலம் மின்னஞ்சல் அனுப்பும் புதிய ஃபங்ஷன்
-async function sendExcelEmail(userData) {
+// 📩 5 மணிநேரத்திற்கு ஒருமுறை எக்செல் & பிடிஎஃப் அறிக்கையைத் தயாரித்து மெயில் அனுப்பும் ஃபங்ஷன்
+async function generateAndSendReports() {
     try {
-        console.log('[Excel & Resend]: Creating Excel Sheet...');
-
-        // 1. புதிய Excel வொர்க்புக் உருவாக்குதல்
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Lead Details');
-
-        // தற்போதைய தேதி மற்றும் நேரம் கணக்கிடுதல்
+        console.log('[Cron Job]: Preparing automated Excel and PDF Reports...');
         const now = new Date();
-        const dateStr = now.toLocaleDateString('en-IN'); // DD/MM/YYYY
-        const timeStr = now.toLocaleTimeString('en-IN'); // HH:MM:SS
+        const dateStr = now.toLocaleDateString('en-IN').replace(/\//g, '-');
 
-        // எக்செல் ஹெட்டிங் வரிசை அமைப்பு (S.No முதல் அனைத்து விவரங்களும்)
+        if (Object.keys(trackedUsers).length === 0) {
+            console.log('[Cron Job]: No analytics data captured in the last 5 hours.');
+            return;
+        }
+
+        // --- PART A: ADVANCED EXCEL GENERATION ---
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Live UX Analytics');
+
         worksheet.columns = [
             { header: 'S.No', key: 'sno', width: 8 },
-            { header: 'Date', key: 'date', width: 12 },
-            { header: 'Time', key: 'time', width: 12 },
-            { header: 'Telegram ID', key: 'tgId', width: 15 },
-            { header: 'Telegram Username', key: 'tgUsername', width: 20 },
-            { header: 'Real Name', key: 'realName', width: 20 },
-            { header: 'Email ID', key: 'email', width: 25 },
-            { header: 'Age', key: 'age', width: 10 },
-            { header: 'Language Choice', key: 'lang', width: 15 },
-            { header: 'Location (Oor)', key: 'from', width: 20 },
-            { header: 'Interest Selected', key: 'interest', width: 18 },
-            { header: 'FLAMES User', key: 'flames1', width: 18 },
-            { header: 'FLAMES Partner', key: 'flames2', width: 18 },
-            { header: 'FLAMES Result', key: 'flamesRes', width: 18 }
+            { header: 'User/Telegram ID', key: 'tgId', width: 18 },
+            { header: 'Resolved GPS Location (Village/City)', key: 'loc', width: 40 },
+            { header: 'Screen Time (Seconds)', key: 'screenTime', width: 20 },
+            { header: 'Usage Freq', key: 'freq', width: 12 },
+            { header: 'Device Screen Size', key: 'screenSize', width: 18 },
+            { header: 'Visited Pages Path', key: 'pages', width: 30 },
+            { header: 'Browser Agent', key: 'browser', width: 30 }
         ];
 
-        // டேட்டாவை எக்செல் ரோவாக (Row) சேர்த்தல்
-        worksheet.addRow({
-            sno: 1,
-            date: dateStr,
-            time: timeStr,
-            tgId: userData.telegramId,
-            tgUsername: userData.telegramUsername,
-            realName: userData.name || 'N/A',
-            email: userData.email || 'N/A',
-            age: userData.age || 'N/A',
-            lang: userData.lang || 'N/A',
-            from: userData.from || 'N/A',
-            interest: userData.interest || 'N/A',
-            flames1: userData.flamesName1 || 'N/A',
-            flames2: userData.flamesName2 || 'N/A',
-            flamesRes: userData.flamesResult || 'Not Played'
+        let index = 1;
+        for (const id in trackedUsers) {
+            worksheet.addRow({
+                sno: index++,
+                tgId: id,
+                loc: trackedUsers[id].resolvedLocation || 'N/A',
+                screenTime: trackedUsers[id].screenTime || 0,
+                freq: trackedUsers[id].usageFrequency || 1,
+                screenSize: trackedUsers[id].screenSize || 'N/A',
+                pages: trackedUsers[id].visitedPages ? trackedUsers[id].visitedPages.join(', ') : 'Root',
+                browser: trackedUsers[id].browser || 'N/A'
+            });
+        }
+        worksheet.getRow(1).font = { bold: true };
+        const excelBuffer = await workbook.xlsx.writeBuffer();
+
+        // --- PART B: ADVANCED PDF GENERATION ---
+        const pdfDoc = new PDFDocument();
+        let pdfBuffers = [];
+        pdfDoc.on('data', chunk => pdfBuffers.push(chunk));
+
+        pdfDoc.fontSize(22).fillColor('#1E3A8A').text('Rakesh Daniel Portfolio Screen Analytics', { align: 'center' });
+        pdfDoc.fontSize(12).fillColor('#64748B').text(`Periodical Update: ${now.toLocaleString('en-IN')}\n`, { align: 'center' });
+        pdfDoc.moveDown();
+
+        for (const id in trackedUsers) {
+            pdfDoc.fontSize(13).fillColor('#0284C7').text(`👤 Target User System ID: ${id}`, { bold: true });
+            pdfDoc.fontSize(10).fillColor('#334155').text(
+                `📍 True Location  : ${trackedUsers[id].resolvedLocation}\n` +
+                `⏱️ Total Screen Time: ${trackedUsers[id].screenTime} Seconds\n` +
+                `🔄 Interaction Freq : ${trackedUsers[id].usageFrequency} Hits\n` +
+                `📱 Screen Metric     : ${trackedUsers[id].screenSize}\n` +
+                `🛤️ Explored Paths   : ${trackedUsers[id].visitedPages ? trackedUsers[id].visitedPages.join(' -> ') : '/'}\n` +
+                `------------------------------------------------------------------------------------------------------------------------\n`
+            );
+            pdfDoc.moveDown();
+        }
+        pdfDoc.end();
+
+        const pdfBuffer = await new Promise((resolve) => {
+            pdfDoc.on('end', () => resolve(Buffer.concat(pdfBuffers)));
         });
 
-        // ஹெட்டிங் ஸ்டைல் மாற்றுதல் (Bold)
-        worksheet.getRow(1).font = { bold: true };
-
-        // எக்செல் கோப்பை பஃபராக (Buffer) மாற்றுதல்
-        const buffer = await workbook.xlsx.writeBuffer();
-
-        console.log('[Resend]: Sending Email with Excel Attachment...');
-
-        // 2. Resend API மூலம் அட்டாச்மென்ட்டாக மெயில் அனுப்புதல்
-        const { data, error } = await resend.emails.send({
-            from: 'Rakesh Analytics <onboarding@resend.dev>',
-            to: [process.env.MY_EMAIL], 
-            subject: `📊 New Excel Lead: ${userData.name || 'Unknown'} - ${dateStr}`,
-            html: `<p>Hi Rakesh, a new user has interacted with your bot. Please find the attached <strong>Excel Sheet</strong> for full tracking data.</p>`,
+        // --- PART C: RESEND EMAIL ATTACHMENTS ---
+        await resend.emails.send({
+            from: 'Rakesh Live Analytics <onboarding@resend.dev>',
+            to: [process.env.MY_EMAIL],
+            subject: `📊 Automated 5-Hour UI/UX Analytics & Screen Time Report - ${dateStr}`,
+            html: `<p>Hi Rakesh, attached are your advanced metric log files (Excel + PDF) capturing live data paths and user screen statistics.</p>`,
             attachments: [
                 {
-                    filename: `Lead_${userData.name || 'User'}_${dateStr.replace(/\//g, '-')}.xlsx`,
-                    content: buffer.toString('base64'),
+                    filename: `Live_Analytics_Log_${dateStr}.xlsx`,
+                    content: excelBuffer.toString('base64'),
                     contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                },
+                {
+                    filename: `Live_Analytics_Log_${dateStr}.pdf`,
+                    content: pdfBuffer.toString('base64'),
+                    contentType: 'application/vnd.openxmlformats-officedocument.pdf'
                 }
             ]
         });
 
-        if (error) {
-            console.error('[Resend Error]: ❌', error.message);
-            return { success: false, error };
-        }
-
-        console.log('[Resend Email Sent!]: Excel Sheet delivered successfully. ✅ ID:', data.id);
-        return { success: true, data };
+        console.log('[Cron Job Success]: Excel & PDF logs mailed successfully! ✅');
     } catch (err) {
-        console.error('[Excel/Resend System Crash]: ❌', err.message);
-        return { success: false, error: err };
+        console.error('[Cron Job Error]:', err.message);
     }
 }
 
-// பாட் /start கமாண்ட் லாஜிக்
+// ⏰ 5 மணிநேரத்திற்கு ஒருமுறை தானியங்கி ரன் அமைத்தல் (Cron Schedule)
+cron.schedule('0 */5 * * *', () => {
+    generateAndSendReports();
+});
+
+// 🌐 REACT-இல் இருந்து வரும் லைவ் அனலிட்டிக்ஸ் டேட்டாவைப் பெறும் API பாதைகள்
+app.post('/api/save-metrics', (req, res) => {
+    const { telegramId, browser, screenSize, latitude, longitude, resolvedLocation } = req.body;
+    
+    if (!trackedUsers[telegramId]) {
+        trackedUsers[telegramId] = { usageFrequency: 0, screenTime: 0, visitedPages: [] };
+    }
+    
+    trackedUsers[telegramId] = {
+        ...trackedUsers[telegramId],
+        browser: browser.substring(0, 60),
+        screenSize,
+        latitude,
+        longitude,
+        resolvedLocation,
+        usageFrequency: trackedUsers[telegramId].usageFrequency + 1
+    };
+    res.sendStatus(200);
+});
+
+app.post('/api/update-screen-time', (req, res) => {
+    const { telegramId, screenTime } = req.body;
+    if (trackedUsers[telegramId]) {
+        trackedUsers[telegramId].screenTime += screenTime;
+    }
+    res.sendStatus(200);
+});
+
+app.post('/api/track-page', (req, res) => {
+    const { telegramId, page } = req.body;
+    if (trackedUsers[telegramId]) {
+        if (!trackedUsers[telegramId].visitedPages) trackedUsers[telegramId].visitedPages = [];
+        if (!trackedUsers[telegramId].visitedPages.includes(page)) {
+            trackedUsers[telegramId].visitedPages.push(page);
+        }
+    }
+    res.sendStatus(200);
+});
+
+// 🤖 டெலிகிராம் சாட் பாட் லாஜிக் (மாற்றப்படாத பழைய ஃப்ளோ + WebApp பட்டன்)
 bot.start((ctx) => {
     const userId = ctx.from.id;
     userSessions[userId] = { 
@@ -204,8 +249,9 @@ bot.start((ctx) => {
     };
 
     ctx.reply(
-        "Choose your preferred language / உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்:",
+        `வணக்கம் ${ctx.from.first_name || 'நண்பா'}! உங்கள் மொழியைத் தேர்ந்தெடுக்கவும் / Choose language:\n\n(Note: எனது வெப்சைட்டை நேரடியாகப் பார்க்க கீழே உள்ள "🌐 Open Portfolio" பட்டனைப் பயன்படுத்தவும்!)`,
         Markup.inlineKeyboard([
+            [Markup.button.webApp('🌐 Open Portfolio Website', 'https://rakesh-akm-portfolio.netlify.app')],
             [Markup.button.callback('English 🇬🇧', 'LANG_EN')],
             [Markup.button.callback('தமிழ் 🇮🇳', 'LANG_TA')],
             [Markup.button.callback('Tanglish ✍️', 'LANG_TG')]
@@ -213,16 +259,12 @@ bot.start((ctx) => {
     );
 });
 
-// பட்டன் க்ளிக்குகளை ஹேண்டில் செய்ய
 bot.action(/LANG_(EN|TA|TG)/, (ctx) => {
     const userId = ctx.from.id;
     const lang = ctx.match[1];
-
     if (!userSessions[userId]) userSessions[userId] = { telegramId: userId, telegramUsername: ctx.from.username || 'N/A' };
-    
     userSessions[userId].lang = lang;
     userSessions[userId].stage = 'ASK_NAME';
-    
     ctx.answerCbQuery();
     ctx.reply(textTemplates[lang].welcome);
 });
@@ -231,9 +273,7 @@ bot.action(/INT_(ABOUT|PROJECTS|RESUME)/, async (ctx) => {
     const userId = ctx.from.id;
     const actionType = ctx.match[1];
     const session = userSessions[userId];
-
     if (!session) return ctx.reply("Please /start again.");
-
     const lang = session.lang;
     session.interest = actionType;
 
@@ -242,9 +282,7 @@ bot.action(/INT_(ABOUT|PROJECTS|RESUME)/, async (ctx) => {
     if (actionType === 'RESUME') ctx.replyWithMarkdown(textTemplates[lang].resume);
 
     session.stage = 'ASK_FROM';
-    setTimeout(() => {
-        ctx.reply(textTemplates[lang].ask_from);
-    }, 1000);
+    setTimeout(() => { ctx.reply(textTemplates[lang].ask_from); }, 1000);
     ctx.answerCbQuery();
 });
 
@@ -252,7 +290,6 @@ bot.action(/FLAMES_(YES|NO)/, async (ctx) => {
     const userId = ctx.from.id;
     const choice = ctx.match[1];
     const session = userSessions[userId];
-
     if (!session) return ctx.reply("Please /start again.");
     const lang = session.lang;
 
@@ -261,102 +298,74 @@ bot.action(/FLAMES_(YES|NO)/, async (ctx) => {
         ctx.reply(textTemplates[lang].flames_n1);
     } else {
         ctx.reply(textTemplates[lang].bye);
-        // Excel ஷீட் மெயில் அனுப்புதல்
-        await sendExcelEmail(session);
         delete userSessions[userId];
     }
     ctx.answerCbQuery();
 });
 
-// யூஸர் டெக்ஸ்ட் மெசேஜ் அனுப்பினால் ஒர்க் ஆகும் லாஜிக் (மாற்றியமைக்கப்பட்ட ஃப்ளோ)
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text.trim();
     const session = userSessions[userId];
-
-    if (!session) {
-        return ctx.reply("Kindly type /start to begin interaction.");
-    }
-
+    if (!session) return ctx.reply("Kindly type /start to begin interaction.");
     const lang = session.lang;
 
-    // 1. பெயர் வாங்குதல்
     if (session.stage === 'ASK_NAME') {
         session.name = text;
         session.stage = 'ASK_EMAIL';
         ctx.reply(textTemplates[lang].ask_email);
         return;
     }
-
-    // 2. புதிய ஃபீச்சர்: ஈமெயில் வாங்குதல்
     if (session.stage === 'ASK_EMAIL') {
         session.email = text;
         session.stage = 'ASK_AGE';
         ctx.reply(textTemplates[lang].ask_age);
         return;
     }
-
-    // 3. புதிய ஃபீச்சர்: வயது வாங்குதல்
     if (session.stage === 'ASK_AGE') {
         session.age = text;
         session.stage = 'CHOOSING_INTEREST';
-        
-        ctx.reply(
-            textTemplates[lang].ask_interest(session.name),
-            Markup.inlineKeyboard([
-                [Markup.button.callback('About Rakesh 🧑‍💻', 'INT_ABOUT')],
-                [Markup.button.callback('Projects 🚀', 'INT_PROJECTS')],
-                [Markup.button.callback('Resume 📄', 'INT_RESUME')]
-            ])
-        );
+        ctx.reply(textTemplates[lang].ask_interest(session.name), Markup.inlineKeyboard([
+            [Markup.button.callback('About Rakesh 🧑‍💻', 'INT_ABOUT')],
+            [Markup.button.callback('Projects 🚀', 'INT_PROJECTS')],
+            [Markup.button.callback('Resume 📄', 'INT_RESUME')]
+        ]));
         return;
     }
-
-    // 4. ஊர் விபரம் வாங்குதல்
     if (session.stage === 'ASK_FROM') {
         session.from = text;
         session.stage = 'FLAMES_DECISION';
-
-        ctx.reply(
-            textTemplates[lang].ask_flames,
-            Markup.inlineKeyboard([
-                [Markup.button.callback('Yes 👍', 'FLAMES_YES')],
-                [Markup.button.callback('No 👎', 'FLAMES_NO')]
-            ])
-        );
+        ctx.reply(textTemplates[lang].ask_flames, Markup.inlineKeyboard([
+            [Markup.button.callback('Yes 👍', 'FLAMES_YES')],
+            [Markup.button.callback('No 👎', 'FLAMES_NO')]
+        ]));
         return;
     }
-
-    // 5. FLAMES பெயர் 1
     if (session.stage === 'FLAMES_NAME1') {
         session.flamesName1 = text;
         session.stage = 'FLAMES_NAME2';
         ctx.reply(textTemplates[lang].flames_n2);
         return;
     }
-
-    // 6. FLAMES பெயர் 2 & முடிவு
     if (session.stage === 'FLAMES_NAME2') {
         session.flamesName2 = text;
         const result = calculateFlames(session.flamesName1, session.flamesName2);
         session.flamesResult = result;
-
         ctx.replyWithMarkdown(textTemplates[lang].flames_res(result));
-
-        // Excel ஷீட் மெயில் அனுப்புதல்
-        await sendExcelEmail(session);
-
         delete userSessions[userId];
         return;
     }
 });
 
+// Self-Ping லாஜிக்
+setInterval(() => {
+    axios.get('https://rakeshakmbot.onrender.com').catch((err) => console.log('Ping active.'));
+}, 10 * 60 * 1000);
+
+app.get('/', (req, res) => { res.send('System Live Server Online! ⚡'); });
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
     bot.launch();
-    console.log("Rakesh Daniel's Bot with Excel Delivery is Online! 🤖✅");
 });
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
