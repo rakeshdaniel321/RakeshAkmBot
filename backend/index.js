@@ -18,21 +18,39 @@ app.use(express.json());
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// 🗄️ மெயின் ஒருங்கிணைக்கப்பட்ட டேட்டாவை சேமிக்க
 const trackedUsers = {};  
-// தற்காலிக டைமர்களைச் சேமிக்க
 const sessionTimers = {}; 
 
+// 📝 உங்களுடைய ஒரிஜினல் ரெஸ்யூமே விபரங்கள் இங்கே இணைக்கப்பட்டுள்ளன!
 const textTemplates = {
     EN: {
         welcome: "Hello! Welcome to Rakesh Daniel's Assistant Bot. 🧑‍💻\n\nWhat is your name?",
         ask_email: "Please enter your Email Address: 📧",
         ask_age: "How old are you? (Enter your Age): 🔢",
         ask_interest: (name) => `Nice to meet you ${name}! What would you like to know about Rakesh? Choose an option:`,
-        about: "🧑‍💻 *Rakesh Daniel*\n*Role:* Full-Stack Web Developer (MERN Stack)...",
-        projects: "🚀 *Top Projects:* ...",
-        resume: "📄 *Resume Details:* ...",
-        ask_from: "Where are you from? (Enter your city)",
+        about: "🧑‍💻 *Rakesh Daniel - Full-Stack Developer*\n\n" +
+               "📍 *Location:* Tirunelveli, Tamil Nadu\n" +
+               "📧 *Email:* rakeshdaniel321@gmail.com\n" +
+               "📱 *Mobile:* +91 63797 69075\n\n" +
+               "🎓 *Education:* Bachelor of Computer Applications (BCA) [2023 - 2026] from Sri Sankara Bhagavathi Arts And Science College, Thoothukudi (MS University).\n\n" +
+               "✨ *Summary:* Motivated Fresher specializing in building scalable web applications using the MERN Stack & Next.js. Tech enthusiast dedicated to clean code and optimized backend architecture.",
+        projects: "🚀 *Rakesh's Top Projects:*\n\n" +
+                  "1️⃣ *Secure & Scalable Login System (Backend)*\n" +
+                  "• Built with Node.js, Express, Redis, & BullMQ.\n" +
+                  "• Features API Rate Limiting, HTTP-Only Token rotation, and OWASP security shielding.\n\n" +
+                  "2️⃣ *Hotel Booking Management (MERN)*\n" +
+                  "• Complete full-stack room booking workflow with responsive React UI.\n" +
+                  "• Live: https://hotel-booking-management-navy.vercel.app\n\n" +
+                  "3️⃣ *Mobile Shop E-Commerce (Next.js)*\n" +
+                  "• Built using Next.js & MongoDB with Real-time Filtering & Search optimization.",
+        resume: "📄 *Skills & Expertise:*\n\n" +
+                "💻 *Languages:* JavaScript (ES6+), HTML5, CSS3\n" +
+                "🌐 *Frontend:* React.js, Next.js\n" +
+                "⚙️ *Backend:* Node.js, Express.js, REST APIs, Redis, BullMQ, Telegraf API\n" +
+                "🗄️ *Databases:* MongoDB, MySQL\n" +
+                "🛠️ *Tools:* Git, GitHub, Postman, Vercel, Render\n\n" +
+                "🏅 *Certification:* 30-Day Intensive FSD Master Class Certificate from NoviTech R&D Pvt Ltd.",
+        ask_from: "Where are you from? (Enter your city/town)",
         ask_flames: "Awesome! Shall we play a fun FLAMES game? 🥳",
         flames_n1: "Great! Enter YOUR name:",
         flames_n2: "Enter your PARTNER's name:",
@@ -44,9 +62,27 @@ const textTemplates = {
         ask_email: "தயவுசெய்து உங்கள் ஈமெயில் முகவரியை டைப் செய்யவும்: 📧",
         ask_age: "உங்களுக்கு என்ன வயது ஆகிறது? (வயதை டைப் செய்யவும்): 🔢",
         ask_interest: (name) => `மகிழ்ச்சி ${name}! உங்களுக்கு ராகேஷ் பற்றி என்ன விபரம் தெரிய வேண்டும்?`,
-        about: "🧑‍💻 *ராகேஷ் டேனியல்*...",
-        projects: "🚀 *முக்கிய பிராஜெக்ட்கள்:* ...",
-        resume: "📄 *ரெஸ்யூமே விபரங்கள்:* ...",
+        about: "🧑‍💻 *ராகேஷ் டேனியல் - ஃபல்-ஸ்டாக் டெவலப்பர்*\n\n" +
+               "📍 *ஊர்:* திருநெல்வேலி, தமிழ்நாடு\n" +
+               "📧 *ஈமெயில்:* rakeshdaniel321@gmail.com\n" +
+               "📱 *மொபைல்:* +91 63797 69075\n\n" +
+               "🎓 *படிப்பு:* மனோன்மணியம் சுந்தரனார் பல்கலைக்கழகத்தின் (MSU) கீழ் உள்ள ஸ்ரீ சங்கர பகவதி கலை மற்றும் அறிவியல் கல்லூரியில் BCA (2023-2026) பயின்று வருகிறார்.\n" +
+               "✨ *சுருக்கம்:* MERN ஸ்டாக் மற்றும் Next.js மூலம் சிறந்த இணையதளங்களை உருவாக்குவதில் வல்லவர்.",
+        projects: "🚀 *முக்கிய பிராஜெக்ட்கள்:*\n\n" +
+                  "1️⃣ *பாதுகாப்பான லாகின் சிஸ்டம் (Backend)*\n" +
+                  "• Node.js, Express, Redis மற்றும் BullMQ பயன்படுத்தி உருவாக்கப்பட்டது.\n\n" +
+                  "2️⃣ *ஹோட்டல் புக்கிங் மேனேஜ்மென்ட் (MERN)*\n" +
+                  "• பயனர்கள் எளிதாக அறைகளை புக் செய்யும் வசதி கொண்ட தளம்.\n" +
+                  "• தளம் லிங்க்: https://hotel-booking-management-navy.vercel.app\n\n" +
+                  "3️⃣ *மொபைல் ஷாப் இ-காமர்ஸ் (Next.js)*\n" +
+                  "• Next.js & MongoDB கொண்டு உருவாக்கப்பட்ட அதிவேக தேடல் வசதி கொண்ட தளம்.",
+        resume: "📄 *தொழில்நுட்ப திறன்கள்:*\n\n" +
+                "💻 *மொழிகள்:* JavaScript (ES6+), HTML5, CSS3\n" +
+                "🌐 *ஃபிரண்ட்-எண்ட்:* React.js, Next.js\n" +
+                "⚙️ *பேக்-எண்ட்:* Node.js, Express.js, REST APIs, Redis, BullMQ, Telegraf API\n" +
+                "🗄️ *டேட்டாபேஸ்:* MongoDB, MySQL\n" +
+                "🛠️ *டூல்ஸ்:* Git, GitHub, Postman, Vercel, Render\n\n" +
+                "🏅 *சான்றிதழ்:* NoviTech நிறுவனத்திடம் இருந்து 30 நாட்கள் முழுமையான FSD மாஸ்டர்கிளாஸ் சான்றிதழ் பெற்றுள்ளார்.",
         ask_from: "நீங்கள் எந்த ஊரில் இருந்து மெசேஜ் செய்கிறீர்கள்? (ஊரின் பெயரை டைப் செய்யவும்)",
         ask_flames: "அருமை! நாம் இப்போது ஒரு ஜாலியான FLAMES விளையாட்டு விளையாடலாமா? 🥳",
         flames_n1: "சூப்பர்! முதலில் உங்களுடைய பெயரை டைப் செய்யுங்கள்:",
@@ -59,9 +95,27 @@ const textTemplates = {
         ask_email: "Unga Email Address-a type pannunga: 📧",
         ask_age: "Unga Age enna? (Age-a type pannunga): 🔢",
         ask_interest: (name) => `Magizhchi ${name}! Ungaluku Rakesh pathi enna theriyanum?`,
-        about: "🧑‍💻 *Rakesh Daniel*...",
-        projects: "🚀 *Important Projects:* ...",
-        resume: "📄 *Resume Details:* ...",
+        about: "🧑‍💻 *Rakesh Daniel - MERN Stack Developer*\n\n" +
+               "📍 *Oor:* Tirunelveli, Tamil Nadu\n" +
+               "📧 *Email:* rakeshdaniel321@gmail.com\n" +
+               "📱 *Mobile:* +91 63797 69075\n\n" +
+               "🎓 *Education:* BCA (2023-2026) Sri Sankara Bhagavathi College, Thoothukudi (MS University).\n" +
+               "✨ *Summary:* Clean code & scalable backend design-la specialized-ana MERN stack fresher developer.",
+        projects: "🚀 *Important Projects:*\n\n" +
+                  "1️⃣ *Secure User Login System (Backend)*\n" +
+                  "• Node.js, Express, Redis & BullMQ backend hardening.\n\n" +
+                  "2️⃣ *Hotel Booking System (Full-Stack)*\n" +
+                  "• Clean React UI room booking site.\n" +
+                  "• Link: https://hotel-booking-management-navy.vercel.app\n\n" +
+                  "3️⃣ *Mobile Shop Platform (Next.js)*\n" +
+                  "• Advanced filter optimization and MongoDB backend setup.",
+        resume: "📄 *Resume & Tech Skills:*\n\n" +
+                "💻 *Languages:* JavaScript (ES6+), HTML5, CSS3\n" +
+                "🌐 *Frontend:* React.js, Next.js\n" +
+                "⚙️ *Backend:* Node.js, Express.js, Redis, BullMQ, Telegraf\n" +
+                "🗄️ *Databases:* MongoDB, MySQL\n" +
+                "🛠️ *Tools:* Git, GitHub, Vercel, Render\n\n" +
+                "🏅 *Certificate:* 30-Days Intensive FSD Training from NoviTech R&D.",
         ask_from: "Neenga endha oorla irundhu pesreenga? (Oor pera type pannunga)",
         ask_flames: "Super! Ippo nama oru jolly-ana FLAMES game vilayadlama? 🥳",
         flames_n1: "Sema! First UNGA pera type pannunga:",
@@ -121,7 +175,6 @@ function calculateFlames(name1, name2) {
     return resultMap[flames[0]];
 }
 
-// 📧 PDF மெயில் அனுப்பும் ஃபங்ஷன்
 async function sendInstantUserPDF(tgId, triggerReason) {
     try {
         const u = trackedUsers[tgId];
@@ -178,7 +231,6 @@ async function sendInstantUserPDF(tgId, triggerReason) {
     }
 }
 
-// ⏱️ Drop-out டைமர்
 function handleUserActivityTimeout(tgId) {
     if (sessionTimers[tgId]) clearTimeout(sessionTimers[tgId]);
 
@@ -191,7 +243,6 @@ function handleUserActivityTimeout(tgId) {
     }, 5 * 60 * 1000); 
 }
 
-// 🌐 REACT API ROUTES (With try-catch)
 app.post('/api/save-metrics', (req, res) => {
     try {
         const { telegramId, browser, screenSize, latitude, longitude, resolvedLocation } = req.body;
@@ -237,7 +288,6 @@ app.post('/api/track-page', (req, res) => {
     }
 });
 
-// 🤖 TELEGRAM BOT LOGIC
 bot.start((ctx) => {
     const userId = ctx.from.id;
     const username = ctx.from.username ? `@${ctx.from.username}` : 'No Username';
@@ -363,7 +413,6 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// ⏰ 5 மணிநேர எக்செல் க்ரான் ஜாப்
 async function generateAndSend5HourBackup() {
     try {
         console.log('[Cron Backup]: Preparing Report...');
