@@ -234,26 +234,23 @@ app.post('/api/update-screen-time', (req, res) => {
 
 // உன்னுடைய .env ஃபைலில் BOT_TOKEN இருக்க வேண்டும்
 const bot = new Telegraf(process.env.BOT_TOKEN);
-
+// 🟢 இதை உன்னுடைய server.js கோப்பில் மாற்றிவிட்டு மீண்டும் Render-ல் புஷ் செய்:
 bot.start((ctx) => {
     const from = ctx.from;
     const tgId = from.id.toString();
-    // டெலிகிராம் செட்டிங்ஸ் படி யூசர்நேம் இருந்தால் எடுக்கும் இல்லையென்றால் 'No Username'
     const username = from.username ? `@${from.username}` : 'No Username';
 
-    // செஷனைத் துவங்கும்போது யூசர்நேமை பாஸ் செய்கிறோம்
     initUserSession(tgId, username);
     
     const session = trackedUsers[tgId];
     session.botStage = 'STARTED';
-    
-    // சாட் ஹிஸ்டரியில் சேமிப்பது
     session.chatHistory.push({ time: new Date().toLocaleTimeString(), sender: 'USER', text: '/start' });
 
-    ctx.reply(`வணக்கம் ${from.first_name || 'நண்பா'}! 🚀 Rakesh-ன் Portfolio WebApp-ற்கு உங்களை வரவேற்கிறோம்.\n\nகீழே உள்ள பட்டனை கிளிக் செய்து போர்ட்ஃபோலியோவை ஓபன் செய்யவும்.`, {
+    ctx.reply(`வணக்கம் ${from.first_name || 'நண்பா'}! 🚀 Rakesh-ன் Portfolio WebApp-ற்கு உங்களை வரவேற்கிறோம்.`, {
         reply_markup: {
             inline_keyboard: [
-                [{ text: "🌐 Open Portfolio WebApp", web_app: { url: `https://rakeshdaniel.netlify.app/?tgId=${tgId}` } }]
+                // 🔥 பிக்ஸ்: சரியான நெட்லிஃபை டொமைன் லிங்க்கை இங்கு கொடுத்துள்ளேன்
+                [{ text: "🌐 Open Portfolio WebApp", web_app: { url: `https://rakesh-akm-portfolio.netlify.app/?tgId=${tgId}` } }]
             ]
         }
     });
